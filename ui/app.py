@@ -1,7 +1,9 @@
+import os
+
 import requests
 import streamlit as st
 
-API_BASE = "http://localhost:8000/api"
+API_BASE = os.environ.get("API_BASE_URL", "http://localhost:8000/api")
 
 st.set_page_config(page_title="DocMind", page_icon="\U0001f4c4", layout="wide")
 
