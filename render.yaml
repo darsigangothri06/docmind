@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: docmind-api
+    runtime: python
+    repo: https://github.com/darsigangothri06/docmind
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: CHROMA_PERSIST_DIR
+        value: /opt/render/project/src/chroma_db
+      - key: UPLOAD_DIR
+        value: /opt/render/project/src/data/documents
+
+  - type: web
+    name: docmind-ui
+    runtime: python
+    repo: https://github.com/darsigangothri06/docmind
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run ui/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: API_BASE_URL
+        sync: false
