@@ -1,0 +1,17 @@
+[
+    {
+        "question": "What is the main purpose of the system?",
+        "ground_truth": "The system is designed to provide conversational Q&A over custom document collections using Retrieval-Augmented Generation.",
+        "expected_sources": ["PROJECT_SPEC.md"]
+    },
+    {
+        "question": "What vector database is used for storing embeddings?",
+        "ground_truth": "ChromaDB is used as the vector store for persistent local storage of document embeddings.",
+        "expected_sources": ["PROJECT_SPEC.md"]
+    },
+    {
+        "question": "What evaluation metrics are supported?",
+        "ground_truth": "The system supports four evaluation metrics: Faithfulness, Answer Relevance, Context Precision, and Context Recall.",
+        "expected_sources": ["PROJECT_SPEC.md"]
+    }
+]
