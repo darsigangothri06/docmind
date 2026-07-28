@@ -51,6 +51,9 @@ def get_llm(provider: str, api_key: str, model: str):
     """Factory to create the appropriate LLM based on provider."""
     if provider == "openai":
         return ChatOpenAI(model=model or "gpt-4o-mini", api_key=api_key)
+    if provider == "groq":
+        from langchain_groq import ChatGroq
+        return ChatGroq(model=model or "llama-3.3-70b-versatile", api_key=api_key)
     return ChatGoogleGenerativeAI(
         model=model or "gemini-2.5-flash", google_api_key=api_key
     )

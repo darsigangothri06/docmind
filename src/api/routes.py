@@ -22,15 +22,15 @@ router = APIRouter()
 async def upload_documents(
     name: str,
     files: list[UploadFile] = File(...),
-    provider: str = Form("gemini"),
+    provider: str = Form(""),
     api_key: str = Form(""),
 ):
     """Upload documents to a named collection. Creates collection if it doesn't exist."""
-    if not api_key:
-        raise HTTPException(status_code=400, detail="API key is required")
-
     settings = get_settings()
     ensure_dirs(settings)
+
+    embed_provider = provider or settings.embedding_provider
+    embed_key = api_key or settings.embedding_api_key
 
     loader = DocumentLoader()
     splitter = DocumentSplitter()
@@ -54,7 +54,10 @@ async def upload_documents(
         raise HTTPException(status_code=400, detail="No documents could be loaded from uploaded files")
 
     chunks = splitter.split(all_docs)
-    vsm = VectorStoreManager(provider=provider, persist_dir=settings.chroma_persist_dir, api_key=api_key)
+    vsm = VectorStoreManager(
+        provider=embed_provider, persist_dir=settings.chroma_persist_dir,
+        api_key=embed_key, model=settings.embedding_model,
+    )
 
     try:
         vsm.create_collection(chunks, collection=name)
@@ -74,12 +77,16 @@ async def upload_documents(
 @router.post("/collections/{name}/query", response_model=QueryResponse, summary="Query a collection")
 async def query_collection(name: str, request: QueryRequest):
     """Ask a question against a collection and get an answer with sources."""
-    if not request.api_key:
-        raise HTTPException(status_code=400, detail="API key is required")
-
     settings = get_settings()
+
+    embed_provider = settings.embedding_provider
+    embed_key = request.api_key or settings.embedding_api_key
+    llm_provider = request.provider or settings.llm_provider
+    llm_key = request.api_key or settings.llm_api_key
+
     vsm = VectorStoreManager(
-        provider=request.provider, persist_dir=settings.chroma_persist_dir, api_key=request.api_key
+        provider=embed_provider, persist_dir=settings.chroma_persist_dir,
+        api_key=embed_key, model=settings.embedding_model,
     )
 
     try:
@@ -88,7 +95,7 @@ async def query_collection(name: str, request: QueryRequest):
         raise HTTPException(status_code=404, detail=f"Collection '{name}' not found: {e}")
 
     retriever = DocumentRetriever(vector_store)
-    llm = get_llm(request.provider, request.api_key, request.model)
+    llm = get_llm(llm_provider, llm_key, request.model or settings.llm_model)
     chain = RAGChain(retriever, llm)
 
     try:
@@ -138,12 +145,15 @@ async def delete_collection(name: str):
 @router.post("/evaluate", response_model=EvalResponse, summary="Run evaluation pipeline")
 async def run_evaluation(request: EvalRequest):
     """Run evaluation pipeline on a test dataset against a collection."""
-    if not request.api_key:
-        raise HTTPException(status_code=400, detail="API key is required")
-
     settings = get_settings()
+
+    embed_key = request.api_key or settings.embedding_api_key
+    llm_provider = request.provider or settings.llm_provider
+    llm_key = request.api_key or settings.llm_api_key
+
     vsm = VectorStoreManager(
-        provider=request.provider, persist_dir=settings.chroma_persist_dir, api_key=request.api_key
+        provider=settings.embedding_provider, persist_dir=settings.chroma_persist_dir,
+        api_key=embed_key, model=settings.embedding_model,
     )
 
     try:
@@ -156,7 +166,7 @@ async def run_evaluation(request: EvalRequest):
         raise HTTPException(status_code=404, detail=f"Dataset not found: {request.dataset_path}")
 
     retriever = DocumentRetriever(vector_store)
-    llm = get_llm(request.provider, request.api_key, request.model)
+    llm = get_llm(llm_provider, llm_key, request.model or settings.llm_model)
     chain = RAGChain(retriever, llm)
 
     orchestrator = EvaluationOrchestrator(chain, llm)

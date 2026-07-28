@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
     question: str
-    provider: str = "gemini"
+    provider: str = ""
     api_key: str = ""
     model: str = ""
 
@@ -21,7 +21,7 @@ class CollectionInfo(BaseModel):
 class EvalRequest(BaseModel):
     collection: str
     dataset_path: str = "./data/eval/test_dataset.json"
-    provider: str = "gemini"
+    provider: str = ""
     api_key: str = ""
     model: str = ""
 
@@ -32,5 +32,5 @@ class EvalResponse(BaseModel):
 
 
 class UploadRequest(BaseModel):
-    provider: str = "gemini"
+    provider: str = ""
     api_key: str = ""

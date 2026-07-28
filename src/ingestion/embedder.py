@@ -10,15 +10,15 @@ class VectorStoreManager:
     """Manages embedding generation and ChromaDB vector store operations."""
 
     def __init__(self, provider: str = "gemini", persist_dir: str = "./chroma_db",
-                 api_key: str = ""):
-        self.embeddings = self._get_embeddings(provider, api_key)
+                 api_key: str = "", model: str = ""):
+        self.embeddings = self._get_embeddings(provider, api_key, model)
         self.persist_dir = persist_dir
 
-    def _get_embeddings(self, provider: str, api_key: str):
+    def _get_embeddings(self, provider: str, api_key: str, model: str = ""):
         if provider == "openai":
-            return OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
+            return OpenAIEmbeddings(model=model or "text-embedding-3-small", api_key=api_key)
         return GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004", google_api_key=api_key
+            model=model or "models/gemini-embedding-001", google_api_key=api_key
         )
 
     def create_collection(self, documents: list[Document], collection: str) -> Chroma:
