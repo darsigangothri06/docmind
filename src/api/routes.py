@@ -62,10 +62,15 @@ async def upload_documents(
     try:
         vsm.create_collection(chunks, collection=name)
     except Exception as e:
-        error_msg = str(e)
-        if "API key" in error_msg or "api_key" in error_msg.lower() or "auth" in error_msg.lower():
-            raise HTTPException(status_code=401, detail=f"Invalid API key: {error_msg}")
-        raise HTTPException(status_code=500, detail=f"Indexing failed: {error_msg}")
+        error_msg = str(e).lower()
+        if "429" in error_msg or "rate" in error_msg or "quota" in error_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limited by embedding provider. Please wait and try again.",
+            )
+        if "api key" in error_msg or "api_key" in error_msg or "auth" in error_msg:
+            raise HTTPException(status_code=401, detail=f"Invalid API key: {e}")
+        raise HTTPException(status_code=500, detail=f"Indexing failed: {e}")
 
     return {
         "message": f"Uploaded {len(files)} file(s) to collection '{name}'",
@@ -101,10 +106,15 @@ async def query_collection(name: str, request: QueryRequest):
     try:
         response = chain.query(request.question)
     except Exception as e:
-        error_msg = str(e)
-        if "API key" in error_msg or "api_key" in error_msg.lower() or "auth" in error_msg.lower():
-            raise HTTPException(status_code=401, detail=f"Invalid API key: {error_msg}")
-        raise HTTPException(status_code=500, detail=f"Query failed: {error_msg}")
+        error_msg = str(e).lower()
+        if "429" in error_msg or "rate" in error_msg or "quota" in error_msg:
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limited by LLM provider. Please wait and try again.",
+            )
+        if "api key" in error_msg or "api_key" in error_msg or "auth" in error_msg:
+            raise HTTPException(status_code=401, detail=f"Invalid API key: {e}")
+        raise HTTPException(status_code=500, detail=f"Query failed: {e}")
     return QueryResponse(answer=response.answer, sources=response.sources)
 
 

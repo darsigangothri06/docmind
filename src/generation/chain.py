@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import time
+import logging
+
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
@@ -9,6 +12,16 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from .prompts import SYSTEM_PROMPT
 from .models import RAGResponse
 from ..retrieval.retriever import DocumentRetriever
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+BASE_DELAY = 2
+
+
+def _is_rate_limit(err: Exception) -> bool:
+    msg = str(err).lower()
+    return "429" in msg or "rate" in msg or "quota" in msg
 
 
 class RAGChain:
@@ -29,14 +42,27 @@ class RAGChain:
 
     def query(self, question: str) -> RAGResponse:
         docs = self.retriever.retrieve(question)
-        answer = self.chain.invoke(question)
-        return RAGResponse(
-            answer=answer,
-            sources=[
-                {"content": d.page_content[:200], "metadata": d.metadata}
-                for d in docs
-            ],
-        )
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                answer = self.chain.invoke(question)
+                return RAGResponse(
+                    answer=answer,
+                    sources=[
+                        {"content": d.page_content[:200], "metadata": d.metadata}
+                        for d in docs
+                    ],
+                )
+            except Exception as e:
+                if _is_rate_limit(e) and attempt < MAX_RETRIES - 1:
+                    delay = BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        f"Rate limited, retrying in {delay}s "
+                        f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                    )
+                    time.sleep(delay)
+                else:
+                    raise
 
     @staticmethod
     def _format_docs(docs) -> str:

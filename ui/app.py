@@ -1,4 +1,5 @@
 import os
+import time
 
 import requests
 import streamlit as st
@@ -20,12 +21,39 @@ st.info(
 )
 
 
+def format_elapsed(elapsed: float) -> str:
+    mins, secs = divmod(int(elapsed), 60)
+    if mins > 0:
+        return f"{mins}m {secs}s"
+    return f"{secs}s"
+
+
+def api_call_with_retry(method, url, max_retries=3, **kwargs):
+    """Make an API call with retry on 429/rate-limit errors."""
+    base_delay = 2
+    for attempt in range(max_retries):
+        try:
+            resp = method(url, timeout=120, **kwargs)
+            if resp.status_code == 429:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    time.sleep(delay)
+                    continue
+            return resp
+        except requests.ConnectionError:
+            if attempt < max_retries - 1:
+                time.sleep(base_delay)
+                continue
+            raise
+    return resp
+
+
 def fetch_collections() -> list[dict]:
     try:
-        resp = requests.get(f"{API_BASE}/collections")
+        resp = requests.get(f"{API_BASE}/collections", timeout=30)
         if resp.status_code == 200:
             return resp.json()
-    except requests.ConnectionError:
+    except (requests.ConnectionError, requests.Timeout):
         pass
     return []
 
@@ -62,28 +90,51 @@ with col_mgmt:
         "Upload and Index",
         disabled=not (new_collection_name and uploaded_files),
     ):
-        with st.spinner("Uploading and indexing documents..."):
+        with st.status("Indexing documents...", expanded=True) as status:
+            start = time.time()
+            st.write("Uploading files to server...")
             files = [("files", (f.name, f.getvalue(), f.type)) for f in uploaded_files]
             try:
-                resp = requests.post(
+                st.write("Splitting and embedding documents...")
+                resp = api_call_with_retry(
+                    requests.post,
                     f"{API_BASE}/collections/{new_collection_name}/upload",
                     files=files,
                 )
+                elapsed = time.time() - start
                 if resp.status_code == 200:
                     result = resp.json()
+                    status.update(
+                        label=f"Indexed in {format_elapsed(elapsed)}",
+                        state="complete",
+                    )
                     st.success(
                         f"Indexed {result['documents_loaded']} docs "
                         f"({result['chunks_created']} chunks)"
                     )
                     st.rerun()
+                elif resp.status_code == 429:
+                    status.update(label="Rate limited", state="error")
+                    st.error(
+                        "Rate limited by API provider. "
+                        "Wait 30 to 60 seconds and try again."
+                    )
                 else:
+                    status.update(label="Failed", state="error")
                     st.error(f"Error: {resp.json().get('detail', resp.text)}")
             except requests.ConnectionError:
-                st.error("Cannot connect to API server.")
+                status.update(label="Connection failed", state="error")
+                st.error(
+                    "Cannot connect to API server. "
+                    "The server may be starting up (free tier cold start takes ~30s). "
+                    "Please try again in a moment."
+                )
 
     if selected_collection and st.button("Delete Collection", type="secondary"):
         try:
-            resp = requests.delete(f"{API_BASE}/collections/{selected_collection}")
+            resp = requests.delete(
+                f"{API_BASE}/collections/{selected_collection}", timeout=30
+            )
             if resp.status_code == 200:
                 st.success(f"Deleted '{selected_collection}'")
                 st.rerun()
@@ -125,14 +176,28 @@ with col_main:
                     st.markdown(prompt)
 
                 with st.chat_message("assistant"):
-                    with st.spinner("Thinking..."):
+                    with st.status("Thinking...", expanded=True) as status:
+                        start = time.time()
+                        timer_placeholder = st.empty()
+                        timer_placeholder.caption("Retrieving relevant documents...")
+
                         try:
-                            resp = requests.post(
+                            resp = api_call_with_retry(
+                                requests.post,
                                 f"{API_BASE}/collections/{selected_collection}/query",
                                 json={"question": prompt},
                             )
+                            elapsed = time.time() - start
+                            timer_placeholder.caption(
+                                f"Completed in {format_elapsed(elapsed)}"
+                            )
+
                             if resp.status_code == 200:
                                 data = resp.json()
+                                status.update(
+                                    label=f"Done in {format_elapsed(elapsed)}",
+                                    state="complete",
+                                )
                                 st.markdown(data["answer"])
                                 if data["sources"]:
                                     with st.expander("Sources"):
@@ -154,13 +219,27 @@ with col_main:
                                         "sources": data["sources"],
                                     }
                                 )
+                            elif resp.status_code == 429:
+                                status.update(label="Rate limited", state="error")
+                                st.warning(
+                                    "Rate limited by API provider. "
+                                    "Wait 30 to 60 seconds and try again."
+                                )
                             else:
+                                status.update(label="Error", state="error")
                                 error_msg = resp.json().get(
                                     "detail", "Unknown error"
                                 )
                                 st.error(f"Error: {error_msg}")
                         except requests.ConnectionError:
-                            st.error("Cannot connect to API server.")
+                            status.update(
+                                label="Connection failed", state="error"
+                            )
+                            st.error(
+                                "Cannot connect to API server. "
+                                "The server may be starting up. "
+                                "Please try again in a moment."
+                            )
 
     with tab_eval:
         st.subheader("Evaluation")
@@ -180,17 +259,35 @@ with col_main:
             "Run Evaluation",
             disabled=eval_collection == "(none)",
         ):
-            with st.spinner("Running evaluation (this may take a minute)..."):
+            with st.status(
+                "Running evaluation...", expanded=True
+            ) as status:
+                start = time.time()
+                timer_placeholder = st.empty()
+                timer_placeholder.caption(
+                    "This may take 1 to 3 minutes depending on dataset size..."
+                )
+
                 try:
-                    resp = requests.post(
+                    resp = api_call_with_retry(
+                        requests.post,
                         f"{API_BASE}/evaluate",
                         json={
                             "collection": eval_collection,
                             "dataset_path": dataset_path,
                         },
                     )
+                    elapsed = time.time() - start
+                    timer_placeholder.caption(
+                        f"Completed in {format_elapsed(elapsed)}"
+                    )
+
                     if resp.status_code == 200:
                         data = resp.json()
+                        status.update(
+                            label=f"Done in {format_elapsed(elapsed)}",
+                            state="complete",
+                        )
 
                         st.subheader("Average Scores")
                         cols = st.columns(len(data["average_scores"]))
@@ -209,9 +306,21 @@ with col_main:
                             ):
                                 st.markdown(f"**Answer:** {r['answer']}")
                                 st.json(r["scores"])
+                    elif resp.status_code == 429:
+                        status.update(label="Rate limited", state="error")
+                        st.warning(
+                            "Rate limited by API provider. "
+                            "Wait 30 to 60 seconds and try again."
+                        )
                     else:
+                        status.update(label="Error", state="error")
                         st.error(
                             f"Error: {resp.json().get('detail', resp.text)}"
                         )
                 except requests.ConnectionError:
-                    st.error("Cannot connect to API server.")
+                    status.update(label="Connection failed", state="error")
+                    st.error(
+                        "Cannot connect to API server. "
+                        "The server may be starting up. "
+                        "Please try again in a moment."
+                    )
