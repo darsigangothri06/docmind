@@ -15,7 +15,7 @@ st.caption(
 )
 
 st.info(
-    "This demo uses an open-source LLM (Llama 3.1 8B via Groq) on a free tier. "
+    "This demo uses an open-source LLM (GPT-OSS 20B via Groq) on a free tier. "
     "Output quality may vary compared to commercial models. "
     "Responses typically take 5 to 15 seconds depending on document size."
 )

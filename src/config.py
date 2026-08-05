@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     llm_provider: str = "groq"
     llm_api_key: str = ""
-    llm_model: str = "llama-3.1-8b-instant"
+    llm_model: str = "openai/gpt-oss-20b"
     embedding_provider: str = "gemini"
     embedding_api_key: str = ""
     embedding_model: str = "models/gemini-embedding-001"
