@@ -32,7 +32,7 @@ EVALUATION FLOW:
 | LLM | OpenAI `gpt-4o-mini` OR Google `gemini-2.5-flash` (user-configured) |
 | API server | FastAPI + Uvicorn |
 | Frontend | Streamlit |
-| Document parsing | PyPDF2, Unstructured |
+| Document parsing | pypdf, Unstructured |
 | Python version | 3.11+ |
 
 ## Directory Structure
@@ -443,7 +443,7 @@ chromadb>=0.5.0
 fastapi>=0.115.0
 uvicorn>=0.30.0
 streamlit>=1.40.0
-pypdf2>=3.0.0
+pypdf>=4.0.0
 unstructured>=0.16.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
